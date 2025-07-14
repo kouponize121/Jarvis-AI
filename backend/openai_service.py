@@ -1,4 +1,9 @@
-import openai
+try:
+    import openai
+    OPENAI_AVAILABLE = True
+except ImportError:
+    OPENAI_AVAILABLE = False
+    
 import logging
 from typing import Optional
 from database import db
@@ -11,6 +16,10 @@ class OpenAIService:
     
     def initialize_client(self, api_key: str):
         """Initialize OpenAI client with API key"""
+        if not OPENAI_AVAILABLE:
+            logger.error("OpenAI library not installed")
+            return False
+            
         try:
             openai.api_key = api_key
             self.client = openai
@@ -27,6 +36,9 @@ class OpenAIService:
     
     def generate_response(self, user_id: int, message: str, context: str = "") -> str:
         """Generate AI response using GPT"""
+        if not OPENAI_AVAILABLE:
+            return "OpenAI library not installed. Please install it using: pip install openai"
+            
         try:
             config = db.get_user_config(user_id)
             if not config or not config.get('openai_key'):
@@ -76,6 +88,9 @@ class OpenAIService:
     
     def generate_mom(self, user_id: int, meeting_title: str, attendees: str, notes: str) -> str:
         """Generate Meeting Minutes using GPT"""
+        if not OPENAI_AVAILABLE:
+            return "OpenAI library not installed. Please install it using: pip install openai"
+            
         try:
             config = db.get_user_config(user_id)
             if not config or not config.get('openai_key'):
@@ -123,6 +138,9 @@ class OpenAIService:
     
     def draft_email(self, user_id: int, recipient: str, context: str, email_type: str = "general") -> dict:
         """Draft email using GPT"""
+        if not OPENAI_AVAILABLE:
+            return {"error": "OpenAI library not installed. Please install it using: pip install openai"}
+            
         try:
             config = db.get_user_config(user_id)
             if not config or not config.get('openai_key'):
