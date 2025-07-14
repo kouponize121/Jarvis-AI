@@ -124,8 +124,70 @@ async def get_system_config(user_id: int = Depends(get_current_user)):
 
 @api_router.post("/config")
 async def update_system_config(config: SystemConfig, user_id: int = Depends(get_current_user)):
-    db.update_user_config(user_id, config.dict())
-    return {"message": "Configuration updated successfully"}
+    try:
+        # Test OpenAI API if provided
+        openai_test_result = False
+        openai_error = None
+        if config.openai_key and config.openai_key.strip():
+            try:
+                # Test OpenAI API
+                from openai import OpenAI
+                test_client = OpenAI(api_key=config.openai_key)
+                response = test_client.chat.completions.create(
+                    model="gpt-3.5-turbo",
+                    messages=[{"role": "user", "content": "Hello"}],
+                    max_tokens=5
+                )
+                openai_test_result = True
+            except Exception as e:
+                openai_error = str(e)
+        
+        # Test SMTP if provided
+        smtp_test_result = False
+        smtp_error = None
+        if all([config.smtp_host, config.smtp_port, config.smtp_user, config.smtp_pass]):
+            try:
+                import smtplib
+                server = smtplib.SMTP(config.smtp_host, config.smtp_port)
+                server.starttls()
+                server.login(config.smtp_user, config.smtp_pass)
+                server.quit()
+                smtp_test_result = True
+            except Exception as e:
+                smtp_error = str(e)
+        
+        # Save configuration to database
+        db.update_user_config(user_id, config.dict())
+        
+        # Prepare response message
+        response_msg = "Configuration saved successfully!\n\n"
+        
+        if config.openai_key:
+            if openai_test_result:
+                response_msg += "✅ OpenAI API: Connected successfully\n"
+            else:
+                response_msg += f"❌ OpenAI API: Connection failed - {openai_error}\n"
+        else:
+            response_msg += "⚠️ OpenAI API: No API key provided\n"
+        
+        if all([config.smtp_host, config.smtp_user, config.smtp_pass]):
+            if smtp_test_result:
+                response_msg += "✅ SMTP: Connected successfully\n"
+            else:
+                response_msg += f"❌ SMTP: Connection failed - {smtp_error}\n"
+        else:
+            response_msg += "⚠️ SMTP: Configuration incomplete\n"
+        
+        return {
+            "message": response_msg,
+            "openai_connected": openai_test_result,
+            "smtp_connected": smtp_test_result,
+            "openai_error": openai_error,
+            "smtp_error": smtp_error
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Configuration update failed: {str(e)}")
 
 # Chat Routes
 @api_router.post("/chat", response_model=ChatResponse)
