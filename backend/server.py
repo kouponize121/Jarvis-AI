@@ -45,7 +45,7 @@ async def login(user_data: UserLogin):
     if not user:
         raise HTTPException(status_code=401, detail="Invalid credentials")
     
-    access_token = create_access_token(data={"sub": user["id"]})
+    access_token = create_access_token(data={"sub": str(user["id"])})
     return {"access_token": access_token, "token_type": "bearer", "user": user}
 
 @api_router.post("/forgot-password/verify")
