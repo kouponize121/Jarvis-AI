@@ -487,29 +487,65 @@ async def get_emails(user_id: int = Depends(get_current_user)):
 # System Routes
 @api_router.get("/system/status", response_model=SystemStatus)
 async def get_system_status(user_id: int = Depends(get_current_user)):
-    # Check OpenAI connection
+    # Get user configuration
     config = db.get_user_config(user_id)
+    
     openai_connected = False
     smtp_connected = False
+    openai_error = None
+    smtp_error = None
     
+    # Test OpenAI connection if API key exists
     if config and config.get('openai_key'):
-        openai_connected = openai_service.initialize_client(config['openai_key'])
+        try:
+            from openai import OpenAI
+            test_client = OpenAI(api_key=config['openai_key'])
+            response = test_client.chat.completions.create(
+                model="gpt-3.5-turbo",
+                messages=[{"role": "user", "content": "Hello"}],
+                max_tokens=5
+            )
+            openai_connected = True
+        except Exception as e:
+            openai_error = str(e)
     
+    # Test SMTP connection if configuration exists
     if config and all([config.get('smtp_host'), config.get('smtp_user'), config.get('smtp_pass')]):
-        smtp_connected = email_service.test_smtp_connection(user_id)
+        try:
+            import smtplib
+            server = smtplib.SMTP(config['smtp_host'], config['smtp_port'])
+            server.starttls()
+            server.login(config['smtp_user'], config['smtp_pass'])
+            server.quit()
+            smtp_connected = True
+        except Exception as e:
+            smtp_error = str(e)
     
     # Database is always connected if we reach here
     database_connected = True
     
+    # Build status message
     status_message = "> Initializing Jarvis AI...\n"
-    status_message += f"> Checking GPT API Key: {'✅' if openai_connected else '❌'}\n"
-    status_message += f"> Verifying SMTP Connection: {'✅' if smtp_connected else '❌'}\n"
+    status_message += f"> Checking GPT API Key: {'✅' if openai_connected else '❌'}"
+    if openai_error:
+        status_message += f" ({openai_error[:50]}...)" if len(openai_error) > 50 else f" ({openai_error})"
+    status_message += "\n"
+    
+    status_message += f"> Verifying SMTP Connection: {'✅' if smtp_connected else '❌'}"
+    if smtp_error:
+        status_message += f" ({smtp_error[:50]}...)" if len(smtp_error) > 50 else f" ({smtp_error})"
+    status_message += "\n"
+    
     status_message += f"> Connecting to SQLite DB: {'✅' if database_connected else '❌'}\n"
     
-    if openai_connected and smtp_connected and database_connected:
+    if openai_connected and smtp_connected:
         status_message += "> All systems online. Ready to assist."
+    elif openai_connected:
+        status_message += "> AI ready. Email configuration needed."
+    elif smtp_connected:
+        status_message += "> Email ready. AI configuration needed."
     else:
-        status_message += "> Some systems need configuration."
+        status_message += "> Configuration required. Please update settings."
     
     return SystemStatus(
         openai_connected=openai_connected,
