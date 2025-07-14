@@ -91,16 +91,29 @@ const SystemCheck = ({ user, onLogout }) => {
     }
 
     try {
-      const response = await axios.post('/config', config);
-      setMessage('Configuration saved successfully! Running system check...');
+      setMessage('Saving configuration and testing connections...');
       
-      // Refresh system status after config update
+      const response = await axios.post('/config', config);
+      
+      // Show detailed response from backend
+      setMessage(response.data.message);
+      
+      // Update system status based on test results
+      setSystemStatus(prev => ({
+        ...prev,
+        openai_connected: response.data.openai_connected,
+        smtp_connected: response.data.smtp_connected,
+        database_connected: true
+      }));
+      
+      // Auto-refresh system status after a short delay
       setTimeout(async () => {
         await fetchSystemStatus();
-        setMessage('Configuration saved and system check completed!');
-      }, 1000);
+      }, 2000);
+      
     } catch (error) {
-      setMessage(`Failed to save configuration: ${error.response?.data?.detail || error.message}`);
+      const errorMessage = error.response?.data?.detail || error.message;
+      setMessage(`Failed to save configuration: ${errorMessage}`);
     }
 
     setConfigLoading(false);
