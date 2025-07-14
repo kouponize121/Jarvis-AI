@@ -74,6 +74,14 @@ function App() {
       <BrowserRouter>
         <Routes>
           <Route 
+            path="/" 
+            element={
+              isAuthenticated ? 
+              <Navigate to="/dashboard" /> : 
+              <Home onLogin={handleLogin} />
+            } 
+          />
+          <Route 
             path="/login" 
             element={
               isAuthenticated ? 
@@ -86,7 +94,7 @@ function App() {
             element={
               isAuthenticated ? 
               <Dashboard user={user} onLogout={handleLogout} /> : 
-              <Navigate to="/login" />
+              <Navigate to="/" />
             } 
           />
           <Route 
@@ -94,7 +102,7 @@ function App() {
             element={
               isAuthenticated ? 
               <Chat user={user} onLogout={handleLogout} /> : 
-              <Navigate to="/login" />
+              <Navigate to="/" />
             } 
           />
           <Route 
@@ -102,15 +110,7 @@ function App() {
             element={
               isAuthenticated ? 
               <SystemCheck user={user} onLogout={handleLogout} /> : 
-              <Navigate to="/login" />
-            } 
-          />
-          <Route 
-            path="/" 
-            element={
-              isAuthenticated ? 
-              <Navigate to="/dashboard" /> : 
-              <Navigate to="/login" />
+              <Navigate to="/" />
             } 
           />
         </Routes>
