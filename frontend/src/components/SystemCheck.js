@@ -7,11 +7,11 @@ const SystemCheck = ({ user, onLogout }) => {
     openai_connected: false,
     smtp_connected: false,
     database_connected: false,
-    message: ''
+    message: 'Loading system status...'
   });
   const [config, setConfig] = useState({
     openai_key: '',
-    smtp_host: '',
+    smtp_host: 'smtp.gmail.com',
     smtp_port: 587,
     smtp_user: '',
     smtp_pass: ''
@@ -31,6 +31,12 @@ const SystemCheck = ({ user, onLogout }) => {
       setSystemStatus(response.data);
     } catch (error) {
       console.error('Failed to fetch system status:', error);
+      setSystemStatus({
+        openai_connected: false,
+        smtp_connected: false,
+        database_connected: false,
+        message: 'Error loading system status'
+      });
     }
   };
 
@@ -39,12 +45,12 @@ const SystemCheck = ({ user, onLogout }) => {
       const response = await axios.get('/config');
       setConfig(prev => ({
         ...prev,
-        smtp_host: response.data.smtp_host || '',
+        smtp_host: response.data.smtp_host || 'smtp.gmail.com',
         smtp_port: response.data.smtp_port || 587,
         smtp_user: response.data.smtp_user || '',
-        // Don't update passwords if they're masked
-        openai_key: response.data.openai_key === '***' ? '' : response.data.openai_key || '',
-        smtp_pass: response.data.smtp_pass === '***' ? '' : response.data.smtp_pass || ''
+        // Don't populate password fields if they exist (for security)
+        openai_key: response.data.openai_key === '***' ? '' : '',
+        smtp_pass: response.data.smtp_pass === '***' ? '' : ''
       }));
     } catch (error) {
       console.error('Failed to fetch config:', error);
@@ -60,21 +66,38 @@ const SystemCheck = ({ user, onLogout }) => {
 
   const handleRunSystemCheck = async () => {
     setLoading(true);
+    setMessage('Running system check...');
     await fetchSystemStatus();
     setLoading(false);
+    setMessage('System check completed');
   };
 
-  const handleSaveConfig = async () => {
+  const handleSaveConfig = async (e) => {
+    e.preventDefault();
     setConfigLoading(true);
     setMessage('');
 
+    // Validate required fields
+    if (!config.openai_key.trim()) {
+      setMessage('OpenAI API key is required');
+      setConfigLoading(false);
+      return;
+    }
+
+    if (!config.smtp_user.trim() || !config.smtp_pass.trim()) {
+      setMessage('SMTP username and password are required');
+      setConfigLoading(false);
+      return;
+    }
+
     try {
-      await axios.post('/config', config);
-      setMessage('Configuration saved successfully!');
+      const response = await axios.post('/config', config);
+      setMessage('Configuration saved successfully! Running system check...');
       
       // Refresh system status after config update
-      setTimeout(() => {
-        fetchSystemStatus();
+      setTimeout(async () => {
+        await fetchSystemStatus();
+        setMessage('Configuration saved and system check completed!');
       }, 1000);
     } catch (error) {
       setMessage(`Failed to save configuration: ${error.response?.data?.detail || error.message}`);
@@ -85,6 +108,10 @@ const SystemCheck = ({ user, onLogout }) => {
 
   const getStatusColor = (status) => {
     return status ? '#00FF00' : '#FF0000';
+  };
+
+  const getStatusText = (status) => {
+    return status ? '✅ Connected' : '❌ Disconnected';
   };
 
   return (
@@ -111,7 +138,9 @@ const SystemCheck = ({ user, onLogout }) => {
               <h2 style={{ color: '#00FF00', marginBottom: '20px' }}>
                 System Status
               </h2>
-              <div>{systemStatus.message}</div>
+              <div style={{ whiteSpace: 'pre-line', marginBottom: '20px' }}>
+                {systemStatus.message}
+              </div>
               <div style={{ marginTop: '20px' }}>
                 <button 
                   onClick={handleRunSystemCheck}
@@ -123,22 +152,23 @@ const SystemCheck = ({ user, onLogout }) => {
               </div>
             </div>
 
-            <div className="config-form">
+            <form onSubmit={handleSaveConfig} className="config-form">
               <h2 className="config-title">System Configuration</h2>
               
               <div className="config-grid">
                 <div className="form-group">
-                  <label className="form-label">OpenAI API Key</label>
+                  <label className="form-label">OpenAI API Key *</label>
                   <input
                     type="password"
                     name="openai_key"
                     value={config.openai_key}
                     onChange={handleConfigChange}
-                    placeholder="Enter your OpenAI API key"
+                    placeholder="sk-..."
                     className="form-input"
+                    required
                   />
                   <small style={{ color: '#666666', fontSize: '12px' }}>
-                    Required for AI features
+                    Required for AI features. Get from platform.openai.com
                   </small>
                 </div>
 
@@ -167,7 +197,7 @@ const SystemCheck = ({ user, onLogout }) => {
                 </div>
 
                 <div className="form-group">
-                  <label className="form-label">SMTP Username</label>
+                  <label className="form-label">SMTP Username *</label>
                   <input
                     type="email"
                     name="smtp_user"
@@ -175,11 +205,12 @@ const SystemCheck = ({ user, onLogout }) => {
                     onChange={handleConfigChange}
                     placeholder="your-email@gmail.com"
                     className="form-input"
+                    required
                   />
                 </div>
 
                 <div className="form-group">
-                  <label className="form-label">SMTP Password</label>
+                  <label className="form-label">SMTP Password *</label>
                   <input
                     type="password"
                     name="smtp_pass"
@@ -187,36 +218,37 @@ const SystemCheck = ({ user, onLogout }) => {
                     onChange={handleConfigChange}
                     placeholder="Your app password"
                     className="form-input"
+                    required
                   />
                   <small style={{ color: '#666666', fontSize: '12px' }}>
-                    Use app password for Gmail
+                    Use app password for Gmail (not your regular password)
                   </small>
                 </div>
               </div>
 
               <div style={{ marginTop: '20px' }}>
                 <button 
-                  onClick={handleSaveConfig}
+                  type="submit"
                   disabled={configLoading}
                   className="btn-primary"
                 >
-                  {configLoading ? 'Saving...' : 'Save Configuration'}
+                  {configLoading ? 'Saving Configuration...' : 'Save Configuration'}
                 </button>
               </div>
+            </form>
 
-              {message && (
-                <div style={{ 
-                  marginTop: '15px', 
-                  padding: '10px', 
-                  borderRadius: '4px',
-                  backgroundColor: message.includes('successfully') ? '#001100' : '#110000',
-                  border: `1px solid ${message.includes('successfully') ? '#00FF00' : '#FF0000'}`,
-                  color: message.includes('successfully') ? '#00FF00' : '#FF0000'
-                }}>
-                  {message}
-                </div>
-              )}
-            </div>
+            {message && (
+              <div style={{ 
+                marginTop: '15px', 
+                padding: '10px', 
+                borderRadius: '4px',
+                backgroundColor: message.includes('successfully') || message.includes('completed') ? '#001100' : '#110000',
+                border: `1px solid ${message.includes('successfully') || message.includes('completed') ? '#00FF00' : '#FF0000'}`,
+                color: message.includes('successfully') || message.includes('completed') ? '#00FF00' : '#FF0000'
+              }}>
+                {message}
+              </div>
+            )}
           </div>
         </div>
 
@@ -232,7 +264,7 @@ const SystemCheck = ({ user, onLogout }) => {
               }}>
                 <span>OpenAI API:</span>
                 <span style={{ color: getStatusColor(systemStatus.openai_connected) }}>
-                  {systemStatus.openai_connected ? '✅ Connected' : '❌ Disconnected'}
+                  {getStatusText(systemStatus.openai_connected)}
                 </span>
               </div>
               <div style={{ 
@@ -243,7 +275,7 @@ const SystemCheck = ({ user, onLogout }) => {
               }}>
                 <span>SMTP:</span>
                 <span style={{ color: getStatusColor(systemStatus.smtp_connected) }}>
-                  {systemStatus.smtp_connected ? '✅ Connected' : '❌ Disconnected'}
+                  {getStatusText(systemStatus.smtp_connected)}
                 </span>
               </div>
               <div style={{ 
@@ -254,7 +286,7 @@ const SystemCheck = ({ user, onLogout }) => {
               }}>
                 <span>Database:</span>
                 <span style={{ color: getStatusColor(systemStatus.database_connected) }}>
-                  {systemStatus.database_connected ? '✅ Connected' : '❌ Disconnected'}
+                  {getStatusText(systemStatus.database_connected)}
                 </span>
               </div>
             </div>
@@ -263,19 +295,27 @@ const SystemCheck = ({ user, onLogout }) => {
           <div className="logs-panel">
             <h3 className="logs-title">Configuration Guide</h3>
             <div style={{ fontSize: '12px', color: '#666666' }}>
-              <div style={{ marginBottom: '10px' }}>
+              <div style={{ marginBottom: '15px' }}>
                 <strong style={{ color: '#00FF00' }}>OpenAI API Key:</strong>
                 <br />
-                Get from platform.openai.com
+                1. Go to platform.openai.com
+                <br />
+                2. Create account/login
+                <br />
+                3. Go to API Keys section
+                <br />
+                4. Create new key (starts with sk-)
               </div>
-              <div style={{ marginBottom: '10px' }}>
+              <div style={{ marginBottom: '15px' }}>
                 <strong style={{ color: '#00FF00' }}>Gmail SMTP:</strong>
                 <br />
-                Host: smtp.gmail.com
+                1. Enable 2FA on Gmail
                 <br />
-                Port: 587
+                2. Generate App Password
                 <br />
-                Use app password
+                3. Use app password (not Gmail password)
+                <br />
+                Host: smtp.gmail.com, Port: 587
               </div>
               <div style={{ marginBottom: '10px' }}>
                 <strong style={{ color: '#00FF00' }}>Outlook SMTP:</strong>
