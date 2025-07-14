@@ -1,5 +1,5 @@
 try:
-    import openai
+    from openai import OpenAI
     OPENAI_AVAILABLE = True
 except ImportError:
     OPENAI_AVAILABLE = False
@@ -21,10 +21,9 @@ class OpenAIService:
             return False
             
         try:
-            openai.api_key = api_key
-            self.client = openai
+            self.client = OpenAI(api_key=api_key)
             # Test the connection
-            response = openai.ChatCompletion.create(
+            response = self.client.chat.completions.create(
                 model="gpt-3.5-turbo",
                 messages=[{"role": "user", "content": "Hello"}],
                 max_tokens=10
@@ -44,8 +43,8 @@ class OpenAIService:
             if not config or not config.get('openai_key'):
                 return "OpenAI API key not configured. Please configure it in system settings."
             
-            # Set API key for each request
-            openai.api_key = config['openai_key']
+            # Initialize client for each request
+            client = OpenAI(api_key=config['openai_key'])
             
             # Jarvis personality prompt
             system_prompt = """You are Jarvis, an AI personal assistant created by Sumit Roy. 
@@ -73,7 +72,7 @@ class OpenAIService:
                 {"role": "user", "content": f"Context: {context}\n\nUser: {message}"}
             ]
             
-            response = openai.ChatCompletion.create(
+            response = client.chat.completions.create(
                 model="gpt-3.5-turbo",
                 messages=messages,
                 max_tokens=500,
@@ -96,8 +95,8 @@ class OpenAIService:
             if not config or not config.get('openai_key'):
                 return "OpenAI API key not configured."
             
-            # Set API key for each request
-            openai.api_key = config['openai_key']
+            # Initialize client for each request
+            client = OpenAI(api_key=config['openai_key'])
             
             prompt = f"""Generate professional Meeting Minutes (MoM) from the following:
             
@@ -123,7 +122,7 @@ class OpenAIService:
             Powered by: Jarvis AI Assistant
             """
             
-            response = openai.ChatCompletion.create(
+            response = client.chat.completions.create(
                 model="gpt-3.5-turbo",
                 messages=[{"role": "user", "content": prompt}],
                 max_tokens=800,
@@ -146,8 +145,8 @@ class OpenAIService:
             if not config or not config.get('openai_key'):
                 return {"error": "OpenAI API key not configured."}
             
-            # Set API key for each request
-            openai.api_key = config['openai_key']
+            # Initialize client for each request
+            client = OpenAI(api_key=config['openai_key'])
             
             if email_type == "task_assignment":
                 prompt = f"""Draft a professional email for task assignment:
@@ -179,7 +178,7 @@ class OpenAIService:
                 Body: [email body]
                 """
             
-            response = openai.ChatCompletion.create(
+            response = client.chat.completions.create(
                 model="gpt-3.5-turbo",
                 messages=[{"role": "user", "content": prompt}],
                 max_tokens=600,
