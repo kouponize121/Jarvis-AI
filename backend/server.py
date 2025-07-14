@@ -48,6 +48,51 @@ async def login(user_data: UserLogin):
     access_token = create_access_token(data={"sub": user["id"]})
     return {"access_token": access_token, "token_type": "bearer", "user": user}
 
+@api_router.post("/forgot-password/verify")
+async def verify_forgot_password(data: dict):
+    email = data.get("email")
+    if not email:
+        raise HTTPException(status_code=400, detail="Email is required")
+    
+    conn = db.get_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT security_question FROM users WHERE email = ?", (email,))
+    user = cursor.fetchone()
+    conn.close()
+    
+    if not user or not user[0]:
+        raise HTTPException(status_code=404, detail="User not found or no security question set")
+    
+    return {"security_question": user[0]}
+
+@api_router.post("/forgot-password/reset")
+async def reset_password(data: dict):
+    email = data.get("email")
+    security_answer = data.get("security_answer")
+    new_password = data.get("new_password")
+    
+    if not all([email, security_answer, new_password]):
+        raise HTTPException(status_code=400, detail="All fields are required")
+    
+    conn = db.get_connection()
+    cursor = conn.cursor()
+    
+    # Verify security answer
+    cursor.execute("SELECT security_answer FROM users WHERE email = ?", (email,))
+    user = cursor.fetchone()
+    
+    if not user or user[0] != security_answer:
+        conn.close()
+        raise HTTPException(status_code=401, detail="Invalid security answer")
+    
+    # Update password
+    new_password_hash = db.hash_password(new_password)
+    cursor.execute("UPDATE users SET password_hash = ? WHERE email = ?", (new_password_hash, email))
+    conn.commit()
+    conn.close()
+    
+    return {"message": "Password reset successfully"}
+
 @api_router.get("/me")
 async def get_current_user_info(user_id: int = Depends(get_current_user)):
     conn = db.get_connection()
