@@ -32,9 +32,8 @@ class OpenAIService:
             if not config or not config.get('openai_key'):
                 return "OpenAI API key not configured. Please configure it in system settings."
             
-            if not self.client:
-                if not self.initialize_client(config['openai_key']):
-                    return "Failed to initialize OpenAI client. Please check your API key."
+            # Set API key for each request
+            openai.api_key = config['openai_key']
             
             # Jarvis personality prompt
             system_prompt = """You are Jarvis, an AI personal assistant created by Sumit Roy. 
@@ -82,9 +81,8 @@ class OpenAIService:
             if not config or not config.get('openai_key'):
                 return "OpenAI API key not configured."
             
-            if not self.client:
-                if not self.initialize_client(config['openai_key']):
-                    return "Failed to initialize OpenAI client."
+            # Set API key for each request
+            openai.api_key = config['openai_key']
             
             prompt = f"""Generate professional Meeting Minutes (MoM) from the following:
             
@@ -130,9 +128,8 @@ class OpenAIService:
             if not config or not config.get('openai_key'):
                 return {"error": "OpenAI API key not configured."}
             
-            if not self.client:
-                if not self.initialize_client(config['openai_key']):
-                    return {"error": "Failed to initialize OpenAI client."}
+            # Set API key for each request
+            openai.api_key = config['openai_key']
             
             if email_type == "task_assignment":
                 prompt = f"""Draft a professional email for task assignment:
