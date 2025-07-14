@@ -146,6 +146,10 @@ body {
   text-align: center;
 }
 
+.success-message {
+  color: #00FF00 !important;
+}
+
 /* Main Layout */
 .main-layout {
   height: 100vh;
