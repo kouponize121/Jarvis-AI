@@ -27,13 +27,16 @@ def verify_token(credentials: HTTPAuthorizationCredentials = Depends(security)):
     try:
         token = credentials.credentials
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        user_id: int = payload.get("sub")
-        if user_id is None:
+        user_id_str = payload.get("sub")
+        if user_id_str is None:
             raise HTTPException(status_code=401, detail="Invalid token payload")
+        
+        # Convert string user_id back to int
+        user_id = int(user_id_str)
         return user_id
     except jwt.ExpiredSignatureError:
         raise HTTPException(status_code=401, detail="Token expired")
-    except jwt.PyJWTError as e:
+    except (jwt.PyJWTError, ValueError) as e:
         raise HTTPException(status_code=401, detail=f"Invalid token: {str(e)}")
 
 def get_current_user(user_id: int = Depends(verify_token)):
