@@ -46,6 +46,12 @@ const Chat = ({ user, onLogout }) => {
       const isReady = statusResponse.data.openai_connected;
       setSystemReady(isReady);
       
+      // Check for active meeting flow
+      const flowResponse = await axios.get('/meetings/flow/status');
+      if (flowResponse.data.flow_state !== 'none') {
+        setMeetingFlow(flowResponse.data);
+      }
+      
       // Initial system messages based on actual status
       addMessage('system', '> Jarvis AI Assistant initialized.');
       addSystemLog('Jarvis AI Assistant started');
