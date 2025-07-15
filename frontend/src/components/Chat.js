@@ -478,7 +478,17 @@ const Chat = ({ user, onLogout }) => {
                 value={inputMessage}
                 onChange={(e) => setInputMessage(e.target.value)}
                 placeholder={
-                  currentMeeting 
+                  meetingFlow && meetingFlow.flow_state === 'waiting_for_attendees' 
+                    ? "Enter attendee names (comma-separated)..." 
+                    : meetingFlow && meetingFlow.flow_state === 'collecting_emails'
+                    ? `Enter email for ${meetingFlow.current_attendee}...`
+                    : meetingFlow && meetingFlow.flow_state === 'collecting_notes'
+                    ? "Add meeting note or say 'meeting end'..."
+                    : meetingFlow && meetingFlow.flow_state === 'confirming_summary'
+                    ? "Approve summary (yes/no) or provide feedback..."
+                    : meetingFlow && meetingFlow.flow_state === 'sending_emails'
+                    ? "Say 'send emails' to send MoM to attendees..."
+                    : currentMeeting 
                     ? "Add meeting note or type a command..." 
                     : systemReady 
                       ? "Type a command or message..." 
