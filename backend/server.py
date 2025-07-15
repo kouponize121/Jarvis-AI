@@ -397,7 +397,7 @@ async def confirm_meeting_summary(summary_data: MeetingFlowSummary, user_id: int
     
     # Create actual meeting record
     attendees_data = json.loads(active_flow["attendees_data"])
-    notes_data = json.loads(active_flow["notes_data"])
+    notes_data = json.loads(active_flow["notes_data"]) if active_flow["notes_data"] else []
     summary_info = json.loads(active_flow["summary_data"])
     
     # Get attendee names and emails
