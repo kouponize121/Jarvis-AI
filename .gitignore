@@ -38,6 +38,8 @@ dist
 .env.production.local
 *.env
 .env.*
+!.env.template
+!*.env.template
 
 # Sensitive files
 *token.json*
