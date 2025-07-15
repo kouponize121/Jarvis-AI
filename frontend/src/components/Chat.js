@@ -504,6 +504,19 @@ const Chat = ({ user, onLogout }) => {
 
             {/* Status indicators */}
             <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
+              {meetingFlow && (
+                <div style={{ 
+                  padding: '8px 12px', 
+                  background: '#111111', 
+                  border: '1px solid #00FFFF',
+                  borderRadius: '4px',
+                  color: '#00FFFF',
+                  fontSize: '12px'
+                }}>
+                  <strong>Meeting Flow:</strong> {meetingFlow.flow_state}
+                </div>
+              )}
+              
               {currentMeeting && (
                 <div style={{ 
                   padding: '8px 12px', 
