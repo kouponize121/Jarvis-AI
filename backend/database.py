@@ -113,6 +113,36 @@ class Database:
             )
         """)
         
+        # Contacts table for meeting flow
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS contacts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                name TEXT NOT NULL,
+                email TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (user_id) REFERENCES users (id)
+            )
+        """)
+        
+        # Meeting flow states table
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS meeting_flows (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                meeting_id INTEGER,
+                flow_state TEXT NOT NULL,
+                attendees_data TEXT,
+                notes_data TEXT,
+                summary_data TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (user_id) REFERENCES users (id),
+                FOREIGN KEY (meeting_id) REFERENCES meetings (id)
+            )
+        """)
+        
         conn.commit()
         conn.close()
         logger.info("Database initialized successfully")
