@@ -107,55 +107,60 @@ const Chat = ({ user, onLogout }) => {
     addSystemLog(`User command: ${userMessage}`);
 
     try {
-      // Handle special commands that don't require AI
-      if (userMessage.toLowerCase().includes('start meeting')) {
-        setNeuralActivity('processing');
-        setAiStatus('Starting Meeting...');
-        await handleStartMeeting();
-      } else if (userMessage.toLowerCase().includes('end meeting')) {
-        setNeuralActivity('processing');
-        setAiStatus('Ending Meeting...');
-        await handleEndMeeting();
-      } else if (userMessage.toLowerCase().includes('system check')) {
-        setNeuralActivity('processing');
-        setAiStatus('System Check...');
-        await handleSystemCheck();
-      } else if (userMessage.toLowerCase().includes('who created you')) {
-        setNeuralActivity('processing');
-        setAiStatus('Accessing Memory...');
-        // Add small delay to show neural activity
-        await new Promise(resolve => setTimeout(resolve, 800));
-        addMessage('jarvis', '> I was created by Sumit Roy.');
-        addSystemLog('Creator information provided');
+      // Check if we're in a meeting flow
+      if (meetingFlow && meetingFlow.flow_state !== 'none') {
+        await handleMeetingFlowInput(userMessage);
       } else {
-        // For AI-powered responses, check if system is ready
-        if (!systemReady) {
-          setNeuralActivity('idle');
-          setAiStatus('AI Offline - Config Needed');
-          addMessage('system', '> AI features are not available. Please configure your OpenAI API key in System settings first.');
-          addSystemLog('AI request blocked - API not configured');
+        // Handle special commands that don't require AI
+        if (userMessage.toLowerCase().includes('start meeting') || userMessage.toLowerCase().includes('meeting')) {
+          setNeuralActivity('processing');
+          setAiStatus('Starting Meeting Flow...');
+          await handleStartMeetingFlow(userMessage);
+        } else if (userMessage.toLowerCase().includes('end meeting')) {
+          setNeuralActivity('processing');
+          setAiStatus('Ending Meeting...');
+          await handleEndMeetingFlow();
+        } else if (userMessage.toLowerCase().includes('system check')) {
+          setNeuralActivity('processing');
+          setAiStatus('System Check...');
+          await handleSystemCheck();
+        } else if (userMessage.toLowerCase().includes('who created you')) {
+          setNeuralActivity('processing');
+          setAiStatus('Accessing Memory...');
+          // Add small delay to show neural activity
+          await new Promise(resolve => setTimeout(resolve, 800));
+          addMessage('jarvis', '> I was created by Sumit Roy.');
+          addSystemLog('Creator information provided');
         } else {
-          // Send to AI for processing
-          setNeuralActivity('thinking');
-          setAiStatus('AI Thinking...');
-          
-          const response = await axios.post('/chat', {
-            message: userMessage,
-            context: currentMeeting ? `Current meeting: ${currentMeeting.id}` : ''
-          });
+          // For AI-powered responses, check if system is ready
+          if (!systemReady) {
+            setNeuralActivity('idle');
+            setAiStatus('AI Offline - Config Needed');
+            addMessage('system', '> AI features are not available. Please configure your OpenAI API key in System settings first.');
+            addSystemLog('AI request blocked - API not configured');
+          } else {
+            // Send to AI for processing
+            setNeuralActivity('thinking');
+            setAiStatus('AI Thinking...');
+            
+            const response = await axios.post('/chat', {
+              message: userMessage,
+              context: currentMeeting ? `Current meeting: ${currentMeeting.id}` : ''
+            });
 
-          setNeuralActivity('active');
-          setAiStatus('AI Response Generated');
-          
-          addMessage('jarvis', response.data.response);
-          addSystemLog(`AI response generated`);
+            setNeuralActivity('active');
+            setAiStatus('AI Response Generated');
+            
+            addMessage('jarvis', response.data.response);
+            addSystemLog(`AI response generated`);
 
-          // Handle detected commands
-          if (response.data.command_detected) {
-            setNeuralActivity('processing');
-            setAiStatus('Command Detected...');
-            addSystemLog(`Command detected: ${response.data.command_detected}`);
-            await handleDetectedCommand(response.data.command_detected, response.data.action_required);
+            // Handle detected commands
+            if (response.data.command_detected) {
+              setNeuralActivity('processing');
+              setAiStatus('Command Detected...');
+              addSystemLog(`Command detected: ${response.data.command_detected}`);
+              await handleDetectedCommand(response.data.command_detected, response.data.action_required);
+            }
           }
         }
       }
