@@ -37,8 +37,11 @@ function App() {
       setIsAuthenticated(true);
     } catch (error) {
       console.error('Token validation failed:', error);
+      // Clear invalid token and reset authentication state
       localStorage.removeItem('token');
       delete axios.defaults.headers.common['Authorization'];
+      setIsAuthenticated(false);
+      setUser(null);
     }
     setLoading(false);
   };
