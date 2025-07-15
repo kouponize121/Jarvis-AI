@@ -9,6 +9,8 @@ const Chat = ({ user, onLogout }) => {
   const [currentMeeting, setCurrentMeeting] = useState(null);
   const [systemLogs, setSystemLogs] = useState([]);
   const [systemReady, setSystemReady] = useState(false);
+  const [neuralActivity, setNeuralActivity] = useState('idle'); // idle, thinking, active, processing
+  const [aiStatus, setAiStatus] = useState('Initializing...');
   const messagesEndRef = useRef(null);
 
   useEffect(() => {
@@ -19,7 +21,24 @@ const Chat = ({ user, onLogout }) => {
     scrollToBottom();
   }, [messages]);
 
+  // Update neural activity based on AI state
+  useEffect(() => {
+    if (loading) {
+      setNeuralActivity('thinking');
+      setAiStatus('Processing...');
+    } else if (systemReady) {
+      setNeuralActivity('active');
+      setAiStatus('AI Online');
+    } else {
+      setNeuralActivity('idle');
+      setAiStatus('AI Offline');
+    }
+  }, [loading, systemReady]);
+
   const initializeChat = async () => {
+    setNeuralActivity('processing');
+    setAiStatus('Initializing...');
+    
     // Check system status first
     try {
       const statusResponse = await axios.get('/system/status');
@@ -31,14 +50,20 @@ const Chat = ({ user, onLogout }) => {
       addSystemLog('Jarvis AI Assistant started');
       
       if (isReady) {
+        setNeuralActivity('active');
+        setAiStatus('AI Online - Ready');
         addMessage('jarvis', 'Hello! I am Jarvis, your AI personal assistant. I can help you with meetings, tasks, to-dos, and emails. Try commands like "start meeting", "create task", or "system check".');
         addSystemLog('OpenAI API connected - Ready to assist');
       } else {
+        setNeuralActivity('idle');
+        setAiStatus('AI Offline - Config Needed');
         addMessage('system', '> ⚠️ OpenAI API not configured. Please configure your API key in System settings to enable AI features.');
         addMessage('jarvis', 'I notice my AI capabilities are not yet configured. Please go to System settings to add your OpenAI API key and SMTP configuration. Until then, I can help with basic commands like "start meeting" and "system check".');
         addSystemLog('OpenAI API not configured - Limited functionality');
       }
     } catch (error) {
+      setNeuralActivity('idle');
+      setAiStatus('Connection Error');
       addMessage('system', '> Error checking system status. Please check your connection.');
       addSystemLog('Error checking system status');
     }
@@ -66,6 +91,10 @@ const Chat = ({ user, onLogout }) => {
     setInputMessage('');
     setLoading(true);
 
+    // Neural activity starts processing
+    setNeuralActivity('thinking');
+    setAiStatus('Processing Command...');
+
     // Add user message
     addMessage('user', `> ${userMessage}`);
     addSystemLog(`User command: ${userMessage}`);
@@ -73,37 +102,60 @@ const Chat = ({ user, onLogout }) => {
     try {
       // Handle special commands that don't require AI
       if (userMessage.toLowerCase().includes('start meeting')) {
+        setNeuralActivity('processing');
+        setAiStatus('Starting Meeting...');
         await handleStartMeeting();
       } else if (userMessage.toLowerCase().includes('end meeting')) {
+        setNeuralActivity('processing');
+        setAiStatus('Ending Meeting...');
         await handleEndMeeting();
       } else if (userMessage.toLowerCase().includes('system check')) {
+        setNeuralActivity('processing');
+        setAiStatus('System Check...');
         await handleSystemCheck();
       } else if (userMessage.toLowerCase().includes('who created you')) {
+        setNeuralActivity('processing');
+        setAiStatus('Accessing Memory...');
+        // Add small delay to show neural activity
+        await new Promise(resolve => setTimeout(resolve, 800));
         addMessage('jarvis', '> I was created by Sumit Roy.');
         addSystemLog('Creator information provided');
       } else {
         // For AI-powered responses, check if system is ready
         if (!systemReady) {
+          setNeuralActivity('idle');
+          setAiStatus('AI Offline - Config Needed');
           addMessage('system', '> AI features are not available. Please configure your OpenAI API key in System settings first.');
           addSystemLog('AI request blocked - API not configured');
         } else {
           // Send to AI for processing
+          setNeuralActivity('thinking');
+          setAiStatus('AI Thinking...');
+          
           const response = await axios.post('/chat', {
             message: userMessage,
             context: currentMeeting ? `Current meeting: ${currentMeeting.id}` : ''
           });
 
+          setNeuralActivity('active');
+          setAiStatus('AI Response Generated');
+          
           addMessage('jarvis', response.data.response);
           addSystemLog(`AI response generated`);
 
           // Handle detected commands
           if (response.data.command_detected) {
+            setNeuralActivity('processing');
+            setAiStatus('Command Detected...');
             addSystemLog(`Command detected: ${response.data.command_detected}`);
             await handleDetectedCommand(response.data.command_detected, response.data.action_required);
           }
         }
       }
     } catch (error) {
+      setNeuralActivity('idle');
+      setAiStatus('Error Occurred');
+      
       if (error.response?.status === 401) {
         addMessage('system', `> Authentication error. Please log in again.`);
         onLogout();
@@ -113,7 +165,17 @@ const Chat = ({ user, onLogout }) => {
       }
     }
 
-    setLoading(false);
+    // Reset to normal state after processing
+    setTimeout(() => {
+      setLoading(false);
+      if (systemReady) {
+        setNeuralActivity('active');
+        setAiStatus('AI Online - Ready');
+      } else {
+        setNeuralActivity('idle');
+        setAiStatus('AI Offline');
+      }
+    }, 500);
   };
 
   const handleStartMeeting = async () => {
@@ -145,6 +207,7 @@ const Chat = ({ user, onLogout }) => {
         return;
       }
 
+      setAiStatus('Generating MoM...');
       const response = await axios.post(`/meetings/${currentMeeting.id}/end`);
       addMessage('jarvis', `> Meeting ended. Minutes of Meeting generated:`);
       addMessage('jarvis', response.data.mom);
@@ -160,12 +223,19 @@ const Chat = ({ user, onLogout }) => {
     try {
       const response = await axios.get('/system/status');
       addMessage('system', response.data.message);
+      const wasReady = systemReady;
       setSystemReady(response.data.openai_connected);
       addSystemLog('System check completed');
       
       if (response.data.openai_connected) {
+        if (!wasReady) {
+          setNeuralActivity('active');
+          setAiStatus('AI Online - Ready');
+        }
         addMessage('jarvis', '> All systems operational. I am ready to assist with AI-powered features!');
       } else {
+        setNeuralActivity('idle');
+        setAiStatus('AI Offline - Config Needed');
         addMessage('jarvis', '> Some systems need configuration. Please visit System settings to configure OpenAI API and SMTP.');
       }
     } catch (error) {
@@ -197,6 +267,20 @@ const Chat = ({ user, onLogout }) => {
     return content.split('\n').map((line, index) => (
       <div key={index}>{line}</div>
     ));
+  };
+
+  // Get neural activity class based on state
+  const getNeuralActivityClass = () => {
+    switch (neuralActivity) {
+      case 'thinking':
+        return 'neural-thinking';
+      case 'processing':
+        return 'neural-processing';
+      case 'active':
+        return 'neural-active';
+      default:
+        return 'neural-idle';
+    }
   };
 
   return (
@@ -290,7 +374,7 @@ const Chat = ({ user, onLogout }) => {
         <div className="content-right">
           <div className="neural-panel">
             <h3 className="neural-title">Neural Activity</h3>
-            <div className="neural-visual">
+            <div className={`neural-visual ${getNeuralActivityClass()}`}>
               <div className="neural-wave"></div>
               <div className="neural-dots">
                 <div className="neural-dot"></div>
@@ -306,7 +390,7 @@ const Chat = ({ user, onLogout }) => {
               fontSize: '12px',
               color: systemReady ? '#00FF00' : '#FF0000'
             }}>
-              {systemReady ? 'AI Online' : 'AI Offline'}
+              {aiStatus}
             </div>
           </div>
 
