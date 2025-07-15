@@ -104,6 +104,38 @@ class Email(BaseModel):
     sent_at: datetime
     email_type: str
 
+# Contact Models
+class ContactCreate(BaseModel):
+    name: str
+    email: str
+
+class Contact(BaseModel):
+    id: int
+    name: str
+    email: str
+
+# Meeting Flow Models
+class MeetingFlowStart(BaseModel):
+    attendees: List[str]  # List of attendee names
+
+class MeetingFlowNote(BaseModel):
+    note: str
+
+class MeetingFlowSummary(BaseModel):
+    approved: bool
+
+class MeetingFlowState(BaseModel):
+    id: int
+    flow_state: str
+    meeting_id: Optional[int]
+    attendees_data: Optional[str]
+    notes_data: Optional[str]
+    summary_data: Optional[str]
+
+class MeetingEmailRequest(BaseModel):
+    meeting_id: int
+    attendees: List[str]
+
 # System Models
 class SystemStatus(BaseModel):
     openai_connected: bool
