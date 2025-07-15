@@ -31,9 +31,19 @@ dist/
 dist
 
 # Environment files (comprehensive coverage)
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+*.env
+.env.*
 
+# Sensitive files
 *token.json*
 *credentials.json*
+*secret*
+*key*
 
 # Logs and debug files
 npm-debug.log*
@@ -61,8 +71,16 @@ chainlit.md
 # Deployment
 .vercel
 
-# Data and databases
-agenthub/agents/youtube/db
+# Data and databases - CRITICAL FOR SECURITY
+*.db
+*.sqlite
+*.sqlite3
+jarvis.db
+backend/jarvis.db
+backend/*.db
+**/*.db
+**/*.sqlite
+**/*.sqlite3
 
 # Archive files and large assets
 **/*.zip
@@ -77,4 +95,14 @@ agenthub/agents/youtube/db
 .cache/
 
 # Mobile development
-android-sdk/ 
+android-sdk/
+
+# Test files
+backend_test.py
+*test.py
+test_*.py
+
+# Backup files
+*.backup
+*.bak
+*~ 
