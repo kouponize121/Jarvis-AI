@@ -239,5 +239,143 @@ class Database:
         conn.commit()
         conn.close()
 
+    # Contact management methods
+    def create_contact(self, user_id: int, name: str, email: str):
+        """Create or update a contact"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        # Check if contact already exists
+        cursor.execute("""
+            SELECT id FROM contacts WHERE user_id = ? AND email = ?
+        """, (user_id, email))
+        
+        existing = cursor.fetchone()
+        
+        if existing:
+            # Update existing contact
+            cursor.execute("""
+                UPDATE contacts SET name = ?, updated_at = CURRENT_TIMESTAMP
+                WHERE user_id = ? AND email = ?
+            """, (name, user_id, email))
+        else:
+            # Create new contact
+            cursor.execute("""
+                INSERT INTO contacts (user_id, name, email)
+                VALUES (?, ?, ?)
+            """, (user_id, name, email))
+        
+        conn.commit()
+        conn.close()
+    
+    def get_contact_by_name(self, user_id: int, name: str):
+        """Get contact by name"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute("""
+            SELECT id, name, email FROM contacts 
+            WHERE user_id = ? AND LOWER(name) = LOWER(?)
+        """, (user_id, name))
+        
+        contact = cursor.fetchone()
+        conn.close()
+        
+        if contact:
+            return {"id": contact[0], "name": contact[1], "email": contact[2]}
+        return None
+    
+    def get_all_contacts(self, user_id: int):
+        """Get all contacts for a user"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute("""
+            SELECT id, name, email FROM contacts 
+            WHERE user_id = ? ORDER BY name
+        """, (user_id,))
+        
+        contacts = cursor.fetchall()
+        conn.close()
+        
+        return [{"id": c[0], "name": c[1], "email": c[2]} for c in contacts]
+    
+    # Meeting flow state methods
+    def create_meeting_flow(self, user_id: int, flow_state: str, attendees_data: str = None):
+        """Create a new meeting flow"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute("""
+            INSERT INTO meeting_flows (user_id, flow_state, attendees_data)
+            VALUES (?, ?, ?)
+        """, (user_id, flow_state, attendees_data))
+        
+        flow_id = cursor.lastrowid
+        conn.commit()
+        conn.close()
+        return flow_id
+    
+    def get_active_meeting_flow(self, user_id: int):
+        """Get active meeting flow for user"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute("""
+            SELECT id, meeting_id, flow_state, attendees_data, notes_data, summary_data
+            FROM meeting_flows 
+            WHERE user_id = ? AND flow_state != 'completed'
+            ORDER BY created_at DESC LIMIT 1
+        """, (user_id,))
+        
+        flow = cursor.fetchone()
+        conn.close()
+        
+        if flow:
+            return {
+                "id": flow[0],
+                "meeting_id": flow[1],
+                "flow_state": flow[2],
+                "attendees_data": flow[3],
+                "notes_data": flow[4],
+                "summary_data": flow[5]
+            }
+        return None
+    
+    def update_meeting_flow(self, flow_id: int, flow_state: str = None, meeting_id: int = None, 
+                           attendees_data: str = None, notes_data: str = None, summary_data: str = None):
+        """Update meeting flow state"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        # Build dynamic update query
+        updates = []
+        params = []
+        
+        if flow_state:
+            updates.append("flow_state = ?")
+            params.append(flow_state)
+        if meeting_id:
+            updates.append("meeting_id = ?")
+            params.append(meeting_id)
+        if attendees_data:
+            updates.append("attendees_data = ?")
+            params.append(attendees_data)
+        if notes_data:
+            updates.append("notes_data = ?")
+            params.append(notes_data)
+        if summary_data:
+            updates.append("summary_data = ?")
+            params.append(summary_data)
+        
+        updates.append("updated_at = CURRENT_TIMESTAMP")
+        params.append(flow_id)
+        
+        query = f"UPDATE meeting_flows SET {', '.join(updates)} WHERE id = ?"
+        cursor.execute(query, params)
+        
+        conn.commit()
+        conn.close()
+
 # Initialize database instance
 db = Database()
