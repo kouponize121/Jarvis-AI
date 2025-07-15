@@ -245,6 +245,321 @@ async def start_meeting(meeting: MeetingStart, user_id: int = Depends(get_curren
     
     return {"meeting_id": meeting_id, "message": "Meeting started successfully"}
 
+# Meeting Flow Routes
+@api_router.post("/meetings/flow/start")
+async def start_meeting_flow(flow_data: MeetingFlowStart, user_id: int = Depends(get_current_user)):
+    """Start the meeting flow process"""
+    import json
+    
+    # Check if there's already an active meeting flow
+    active_flow = db.get_active_meeting_flow(user_id)
+    if active_flow:
+        raise HTTPException(status_code=400, detail="There's already an active meeting flow")
+    
+    # Process attendees and check for missing emails
+    attendees_with_emails = []
+    missing_emails = []
+    
+    for attendee_name in flow_data.attendees:
+        contact = db.get_contact_by_name(user_id, attendee_name.strip())
+        if contact:
+            attendees_with_emails.append(contact)
+        else:
+            missing_emails.append(attendee_name.strip())
+    
+    # Create meeting flow state
+    attendees_data = json.dumps({
+        "attendees_with_emails": attendees_with_emails,
+        "missing_emails": missing_emails
+    })
+    
+    flow_state = "collecting_emails" if missing_emails else "collecting_notes"
+    flow_id = db.create_meeting_flow(user_id, flow_state, attendees_data)
+    
+    return {
+        "flow_id": flow_id,
+        "flow_state": flow_state,
+        "attendees_with_emails": attendees_with_emails,
+        "missing_emails": missing_emails,
+        "message": "Meeting flow started"
+    }
+
+@api_router.post("/meetings/flow/add-email")
+async def add_attendee_email(contact_data: ContactCreate, user_id: int = Depends(get_current_user)):
+    """Add email for an attendee and update contacts"""
+    import json
+    
+    # Get active meeting flow
+    active_flow = db.get_active_meeting_flow(user_id)
+    if not active_flow or active_flow["flow_state"] != "collecting_emails":
+        raise HTTPException(status_code=400, detail="No active meeting flow in email collection state")
+    
+    # Add/update contact
+    db.create_contact(user_id, contact_data.name, contact_data.email)
+    
+    # Update meeting flow data
+    attendees_data = json.loads(active_flow["attendees_data"])
+    attendees_data["attendees_with_emails"].append({
+        "name": contact_data.name,
+        "email": contact_data.email
+    })
+    
+    # Remove from missing emails
+    if contact_data.name in attendees_data["missing_emails"]:
+        attendees_data["missing_emails"].remove(contact_data.name)
+    
+    # Update flow state
+    new_flow_state = "collecting_notes" if not attendees_data["missing_emails"] else "collecting_emails"
+    db.update_meeting_flow(
+        active_flow["id"], 
+        flow_state=new_flow_state,
+        attendees_data=json.dumps(attendees_data)
+    )
+    
+    return {
+        "message": "Email added successfully",
+        "flow_state": new_flow_state,
+        "remaining_missing": attendees_data["missing_emails"]
+    }
+
+@api_router.post("/meetings/flow/add-note")
+async def add_meeting_flow_note(note_data: MeetingFlowNote, user_id: int = Depends(get_current_user)):
+    """Add a note to the meeting flow"""
+    import json
+    
+    # Get active meeting flow
+    active_flow = db.get_active_meeting_flow(user_id)
+    if not active_flow or active_flow["flow_state"] != "collecting_notes":
+        raise HTTPException(status_code=400, detail="No active meeting flow in note collection state")
+    
+    # Add note to existing notes
+    existing_notes = json.loads(active_flow["notes_data"]) if active_flow["notes_data"] else []
+    existing_notes.append({
+        "note": note_data.note,
+        "timestamp": datetime.now().isoformat()
+    })
+    
+    # Update meeting flow
+    db.update_meeting_flow(
+        active_flow["id"],
+        notes_data=json.dumps(existing_notes)
+    )
+    
+    return {
+        "message": "Note added successfully",
+        "total_notes": len(existing_notes)
+    }
+
+@api_router.post("/meetings/flow/end")
+async def end_meeting_flow(user_id: int = Depends(get_current_user)):
+    """End the meeting flow and generate summary"""
+    import json
+    
+    # Get active meeting flow
+    active_flow = db.get_active_meeting_flow(user_id)
+    if not active_flow or active_flow["flow_state"] != "collecting_notes":
+        raise HTTPException(status_code=400, detail="No active meeting flow in note collection state")
+    
+    # Generate bullet-point summary
+    notes = json.loads(active_flow["notes_data"]) if active_flow["notes_data"] else []
+    summary_points = []
+    
+    for note in notes:
+        summary_points.append(f"• {note['note']}")
+    
+    summary = "\n".join(summary_points)
+    
+    # Update flow state
+    db.update_meeting_flow(
+        active_flow["id"],
+        flow_state="confirming_summary",
+        summary_data=json.dumps({"summary": summary})
+    )
+    
+    return {
+        "flow_state": "confirming_summary",
+        "summary": summary,
+        "message": "Meeting ended. Please review the summary."
+    }
+
+@api_router.post("/meetings/flow/confirm-summary")
+async def confirm_meeting_summary(summary_data: MeetingFlowSummary, user_id: int = Depends(get_current_user)):
+    """Confirm the meeting summary and generate MoM"""
+    import json
+    
+    # Get active meeting flow
+    active_flow = db.get_active_meeting_flow(user_id)
+    if not active_flow or active_flow["flow_state"] != "confirming_summary":
+        raise HTTPException(status_code=400, detail="No active meeting flow in summary confirmation state")
+    
+    if not summary_data.approved:
+        return {"message": "Summary not approved. Please provide feedback or restart the process."}
+    
+    # Create actual meeting record
+    attendees_data = json.loads(active_flow["attendees_data"])
+    notes_data = json.loads(active_flow["notes_data"])
+    summary_info = json.loads(active_flow["summary_data"])
+    
+    # Get attendee names and emails
+    attendees = attendees_data["attendees_with_emails"]
+    attendee_names = [att["name"] for att in attendees]
+    attendee_emails = [att["email"] for att in attendees]
+    
+    # Create meeting
+    conn = db.get_connection()
+    cursor = conn.cursor()
+    
+    meeting_title = f"Meeting - {datetime.now().strftime('%B %d, %Y at %I:%M %p')}"
+    notes_text = "\n".join([note["note"] for note in notes_data])
+    
+    cursor.execute("""
+        INSERT INTO meetings (user_id, title, attendees, notes, status)
+        VALUES (?, ?, ?, ?, 'active')
+    """, (user_id, meeting_title, ", ".join(attendee_names), notes_text))
+    
+    meeting_id = cursor.lastrowid
+    conn.commit()
+    conn.close()
+    
+    # Generate MoM using OpenAI
+    mom = openai_service.generate_mom(
+        user_id, 
+        meeting_title, 
+        ", ".join(attendee_names), 
+        notes_text
+    )
+    
+    # Update meeting with MoM
+    conn = db.get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        UPDATE meetings 
+        SET status = 'completed', ended_at = CURRENT_TIMESTAMP, mom = ?
+        WHERE id = ? AND user_id = ?
+    """, (mom, meeting_id, user_id))
+    conn.commit()
+    conn.close()
+    
+    # Update flow state
+    db.update_meeting_flow(
+        active_flow["id"],
+        flow_state="sending_emails",
+        meeting_id=meeting_id
+    )
+    
+    return {
+        "flow_state": "sending_emails",
+        "meeting_id": meeting_id,
+        "mom": mom,
+        "attendees": attendees,
+        "message": "MoM generated. Ready to send emails."
+    }
+
+@api_router.post("/meetings/flow/send-emails")
+async def send_meeting_emails(email_request: MeetingEmailRequest, user_id: int = Depends(get_current_user)):
+    """Send MoM emails to attendees"""
+    import json
+    
+    # Get active meeting flow
+    active_flow = db.get_active_meeting_flow(user_id)
+    if not active_flow or active_flow["flow_state"] != "sending_emails":
+        raise HTTPException(status_code=400, detail="No active meeting flow in email sending state")
+    
+    # Get meeting details
+    conn = db.get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT title, attendees, notes, mom FROM meetings 
+        WHERE id = ? AND user_id = ?
+    """, (email_request.meeting_id, user_id))
+    
+    meeting = cursor.fetchone()
+    conn.close()
+    
+    if not meeting:
+        raise HTTPException(status_code=404, detail="Meeting not found")
+    
+    # Get attendee emails
+    attendees_data = json.loads(active_flow["attendees_data"])
+    attendees = attendees_data["attendees_with_emails"]
+    
+    # Send emails to each attendee
+    sent_emails = []
+    failed_emails = []
+    
+    for attendee in attendees:
+        try:
+            # Create email subject and body
+            subject = f"Meeting Minutes - {meeting[0]}"
+            body = f"""Dear {attendee['name']},
+
+Please find the Minutes of the Meeting below:
+
+{meeting[3]}
+
+From Sumit
+
+Best regards,
+Jarvis AI Assistant"""
+            
+            # Send email
+            success = email_service.send_email(
+                user_id, 
+                attendee['email'], 
+                subject, 
+                body, 
+                "meeting_minutes",
+                email_request.meeting_id
+            )
+            
+            if success:
+                sent_emails.append(attendee['email'])
+            else:
+                failed_emails.append(attendee['email'])
+                
+        except Exception as e:
+            failed_emails.append(attendee['email'])
+    
+    # Mark flow as completed
+    db.update_meeting_flow(
+        active_flow["id"],
+        flow_state="completed"
+    )
+    
+    return {
+        "flow_state": "completed",
+        "sent_emails": sent_emails,
+        "failed_emails": failed_emails,
+        "message": f"Meeting flow completed. Emails sent to {len(sent_emails)} attendees."
+    }
+
+@api_router.get("/meetings/flow/status")
+async def get_meeting_flow_status(user_id: int = Depends(get_current_user)):
+    """Get current meeting flow status"""
+    active_flow = db.get_active_meeting_flow(user_id)
+    if not active_flow:
+        return {"flow_state": "none", "message": "No active meeting flow"}
+    
+    return {
+        "flow_state": active_flow["flow_state"],
+        "flow_id": active_flow["id"],
+        "meeting_id": active_flow["meeting_id"],
+        "message": f"Active meeting flow in {active_flow['flow_state']} state"
+    }
+
+# Contact Routes
+@api_router.post("/contacts")
+async def create_contact(contact: ContactCreate, user_id: int = Depends(get_current_user)):
+    """Create a new contact"""
+    db.create_contact(user_id, contact.name, contact.email)
+    return {"message": "Contact created successfully"}
+
+@api_router.get("/contacts")
+async def get_contacts(user_id: int = Depends(get_current_user)):
+    """Get all contacts for the user"""
+    contacts = db.get_all_contacts(user_id)
+    return {"contacts": contacts}
+
 @api_router.post("/meetings/{meeting_id}/notes")
 async def add_meeting_note(meeting_id: int, note: MeetingNote, user_id: int = Depends(get_current_user)):
     conn = db.get_connection()
