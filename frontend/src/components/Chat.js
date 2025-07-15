@@ -7,6 +7,7 @@ const Chat = ({ user, onLogout }) => {
   const [inputMessage, setInputMessage] = useState('');
   const [loading, setLoading] = useState(false);
   const [currentMeeting, setCurrentMeeting] = useState(null);
+  const [meetingFlow, setMeetingFlow] = useState(null); // New state for meeting flow
   const [systemLogs, setSystemLogs] = useState([]);
   const [systemReady, setSystemReady] = useState(false);
   const [neuralActivity, setNeuralActivity] = useState('idle'); // idle, thinking, active, processing
