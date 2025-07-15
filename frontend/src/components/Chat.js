@@ -190,6 +190,144 @@ const Chat = ({ user, onLogout }) => {
     }, 500);
   };
 
+  // New Meeting Flow Functions
+  const handleStartMeetingFlow = async (userMessage) => {
+    try {
+      // Extract attendee names from the message
+      addMessage('jarvis', '> Please provide the names of the attendees (comma-separated):');
+      addSystemLog('Collecting attendee names');
+      
+      // Wait for user to provide attendees
+      setMeetingFlow({ flow_state: 'waiting_for_attendees' });
+    } catch (error) {
+      addMessage('system', `> Failed to start meeting flow: ${error.response?.data?.detail || error.message}`);
+    }
+  };
+
+  const handleMeetingFlowInput = async (userMessage) => {
+    try {
+      if (meetingFlow.flow_state === 'waiting_for_attendees') {
+        // Parse attendee names
+        const attendeeNames = userMessage.split(',').map(name => name.trim()).filter(name => name.length > 0);
+        
+        if (attendeeNames.length === 0) {
+          addMessage('jarvis', '> Please provide at least one attendee name.');
+          return;
+        }
+
+        // Start meeting flow with attendees
+        const response = await axios.post('/meetings/flow/start', {
+          attendees: attendeeNames
+        });
+
+        if (response.data.missing_emails.length > 0) {
+          addMessage('jarvis', `> I found emails for: ${response.data.attendees_with_emails.map(a => a.name).join(', ')}`);
+          addMessage('jarvis', `> Please provide email addresses for: ${response.data.missing_emails.join(', ')}`);
+          addMessage('jarvis', `> Please provide the email for ${response.data.missing_emails[0]}:`);
+          
+          setMeetingFlow({
+            flow_state: 'collecting_emails',
+            missing_emails: response.data.missing_emails,
+            current_attendee: response.data.missing_emails[0]
+          });
+        } else {
+          addMessage('jarvis', `> All attendees found in contacts. Meeting flow started.`);
+          addMessage('jarvis', `> Please share the meeting notes:`);
+          
+          setMeetingFlow({ flow_state: 'collecting_notes' });
+        }
+      } else if (meetingFlow.flow_state === 'collecting_emails') {
+        // Add email for current attendee
+        const response = await axios.post('/meetings/flow/add-email', {
+          name: meetingFlow.current_attendee,
+          email: userMessage.trim()
+        });
+
+        addMessage('jarvis', `> Email added for ${meetingFlow.current_attendee}`);
+
+        if (response.data.remaining_missing.length > 0) {
+          addMessage('jarvis', `> Please provide the email for ${response.data.remaining_missing[0]}:`);
+          setMeetingFlow({
+            ...meetingFlow,
+            current_attendee: response.data.remaining_missing[0]
+          });
+        } else {
+          addMessage('jarvis', `> All attendees confirmed. Please share the meeting notes:`);
+          setMeetingFlow({ flow_state: 'collecting_notes' });
+        }
+      } else if (meetingFlow.flow_state === 'collecting_notes') {
+        // Add note to meeting
+        await axios.post('/meetings/flow/add-note', {
+          note: userMessage
+        });
+
+        addMessage('jarvis', `> Note recorded: "${userMessage}"`);
+        addMessage('jarvis', `> Continue sharing notes or say "meeting end" to finish.`);
+      } else if (meetingFlow.flow_state === 'confirming_summary') {
+        // Handle summary confirmation
+        const approved = userMessage.toLowerCase().includes('yes') || userMessage.toLowerCase().includes('approve') || userMessage.toLowerCase().includes('confirm');
+        
+        if (approved) {
+          const response = await axios.post('/meetings/flow/confirm-summary', {
+            approved: true
+          });
+          
+          addMessage('jarvis', `> MoM generated successfully!`);
+          addMessage('jarvis', response.data.mom);
+          addMessage('jarvis', `> Ready to send emails to attendees. Say "send emails" to proceed.`);
+          
+          setMeetingFlow({ 
+            flow_state: 'sending_emails',
+            meeting_id: response.data.meeting_id,
+            attendees: response.data.attendees
+          });
+        } else {
+          addMessage('jarvis', `> Summary not approved. Please provide feedback or say "restart meeting" to start over.`);
+        }
+      } else if (meetingFlow.flow_state === 'sending_emails') {
+        if (userMessage.toLowerCase().includes('send emails')) {
+          const response = await axios.post('/meetings/flow/send-emails', {
+            meeting_id: meetingFlow.meeting_id,
+            attendees: meetingFlow.attendees.map(a => a.email)
+          });
+          
+          addMessage('jarvis', `> ${response.data.message}`);
+          addMessage('jarvis', `> Emails sent to: ${response.data.sent_emails.join(', ')}`);
+          
+          if (response.data.failed_emails.length > 0) {
+            addMessage('jarvis', `> Failed to send emails to: ${response.data.failed_emails.join(', ')}`);
+          }
+          
+          setMeetingFlow(null);
+          addSystemLog('Meeting flow completed');
+        } else {
+          addMessage('jarvis', `> Say "send emails" to send the MoM to all attendees.`);
+        }
+      }
+    } catch (error) {
+      addMessage('system', `> Meeting flow error: ${error.response?.data?.detail || error.message}`);
+    }
+  };
+
+  const handleEndMeetingFlow = async () => {
+    try {
+      if (!meetingFlow || meetingFlow.flow_state !== 'collecting_notes') {
+        addMessage('jarvis', '> No active meeting in note collection phase.');
+        return;
+      }
+
+      const response = await axios.post('/meetings/flow/end');
+      
+      addMessage('jarvis', `> Meeting ended. Here's the summary:`);
+      addMessage('jarvis', response.data.summary);
+      addMessage('jarvis', `> Please review and confirm this summary (say "yes" to approve or provide feedback).`);
+      
+      setMeetingFlow({ flow_state: 'confirming_summary' });
+    } catch (error) {
+      addMessage('system', `> Failed to end meeting: ${error.response?.data?.detail || error.message}`);
+    }
+  };
+
   const handleStartMeeting = async () => {
     try {
       const response = await axios.post('/meetings/start', {
